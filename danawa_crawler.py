@@ -29,7 +29,7 @@ IS_TEST = False
 PROCESS_COUNT = 2
 
 GITHUB_TOKEN_KEY = 'MY_GITHUB_TOKEN'
-GITHUB_REPOSITORY_NAME = 'sammy310/Danawa-Crawler'
+GITHUB_REPOSITORY_NAME = 'door-JH/Danawa-Crawler'
 
 CRAWLING_DATA_CSV_FILE = 'CrawlingCategory.csv'
 if IS_TEST:
