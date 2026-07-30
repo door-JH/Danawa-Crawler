@@ -102,6 +102,7 @@ class DanawaCrawler:
             browser = webdriver.Chrome(options=self.chrome_option)
             browser.implicitly_wait(5)
             browser.get(crawlingURL)
+            self.CloseOverlayElements(browser)
 
             browser.find_element(By.XPATH, '//option[@value="90"]').click()
         
@@ -109,15 +110,16 @@ class DanawaCrawler:
             wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
             
             for i in range(-1, crawlingSize):
+                self.CloseOverlayElements(browser)
                 if i == -1:
-                    browser.find_element(By.XPATH, '//li[@data-sort-method="NEW"]').click()
+                    self.ClickElementSafely(browser, By.XPATH, '//li[@data-sort-method="NEW"]')
                 elif i == 0:
-                    browser.find_element(By.XPATH, '//li[@data-sort-method="BEST"]').click()
+                    self.ClickElementSafely(browser, By.XPATH, '//li[@data-sort-method="BEST"]')
                 elif i > 0:
                     if i % 10 == 0:
-                        browser.find_element(By.XPATH, '//a[@class="edge_nav nav_next"]').click()
+                        self.ClickElementSafely(browser, By.XPATH, '//a[@class="edge_nav nav_next"]')
                     else:
-                        browser.find_element(By.XPATH, '//a[@class="num "][%d]'%(i%10)).click()
+                        self.ClickElementSafely(browser, By.XPATH, '//a[@class="num "][%d]'%(i%10))
                 wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
                 
                 # Get Product List
@@ -148,6 +150,40 @@ class DanawaCrawler:
         crawlingFile.close()
 
         print('Crawling Finish : ' + crawlingName)
+
+    def CloseOverlayElements(self, browser):
+        try:
+            browser.execute_script("""
+                var selectors = [
+                    'button[class*="close"]',
+                    'button.close',
+                    '.button__close',
+                    '.btn_close',
+                    '.btn_service_close',
+                    '.layer__user-recent button',
+                    '.layer-prod-pdb1 button',
+                    '[role="dialog"] button'
+                ];
+                selectors.forEach(function(sel){
+                    var elems = document.querySelectorAll(sel);
+                    for (var i = 0; i < elems.length; i++) {
+                        try { elems[i].click(); } catch (e) {}
+                    }
+                });
+            """)
+        except Exception:
+            pass
+
+    def ClickElementSafely(self, browser, by, value):
+        try:
+            element = WebDriverWait(browser, 5).until(EC.element_to_be_clickable((by, value)))
+            browser.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
+            element.click()
+        except Exception:
+            try:
+                browser.execute_script("arguments[0].click();", element)
+            except Exception:
+                pass
 
     def ExtractProductName(self, product):
         selectors = [
