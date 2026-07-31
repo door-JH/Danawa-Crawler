@@ -102,6 +102,7 @@ class DanawaCrawler:
             browser.implicitly_wait(5)
             browser.get(crawlingURL)
 
+            browser.execute_script("document.querySelectorAll('modal-widget').forEach(e => e.remove())")
             browser.find_element(By.XPATH, '//option[@value="90"]').click()
         
             wait = WebDriverWait(browser, 10)
