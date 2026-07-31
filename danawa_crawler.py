@@ -5,7 +5,6 @@
 
 
 from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -102,7 +101,6 @@ class DanawaCrawler:
             browser = webdriver.Chrome(options=self.chrome_option)
             browser.implicitly_wait(5)
             browser.get(crawlingURL)
-            self.CloseOverlayElements(browser)
 
             browser.execute_script("document.querySelectorAll('modal-widget').forEach(e => e.remove())")
             browser.find_element(By.XPATH, '//option[@value="90"]').click()
@@ -111,16 +109,15 @@ class DanawaCrawler:
             wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
             
             for i in range(-1, crawlingSize):
-                self.CloseOverlayElements(browser)
                 if i == -1:
-                    self.ClickElementSafely(browser, By.XPATH, '//li[@data-sort-method="NEW"]')
+                    browser.find_element(By.XPATH, '//li[@data-sort-method="NEW"]').click()
                 elif i == 0:
-                    self.ClickElementSafely(browser, By.XPATH, '//li[@data-sort-method="BEST"]')
+                    browser.find_element(By.XPATH, '//li[@data-sort-method="BEST"]').click()
                 elif i > 0:
                     if i % 10 == 0:
-                        self.ClickElementSafely(browser, By.XPATH, '//a[@class="edge_nav nav_next"]')
+                        browser.find_element(By.XPATH, '//a[@class="edge_nav nav_next"]').click()
                     else:
-                        self.ClickElementSafely(browser, By.XPATH, '//a[@class="num "][%d]'%(i%10))
+                        browser.find_element(By.XPATH, '//a[@class="num "][%d]'%(i%10)).click()
                 wait.until(EC.invisibility_of_element((By.CLASS_NAME, 'product_list_cover')))
                 
                 # Get Product List
@@ -138,8 +135,52 @@ class DanawaCrawler:
                         continue
 
                     productId = product.get_attribute('id')[11:]
-                    productName = self.ExtractProductName(product)
-                    productPriceStr = self.ExtractProductPriceStr(product)
+                    productName = product.find_element(By.XPATH, './div/div[2]/p/a').text.strip()
+                    productPrices = product.find_elements(By.XPATH, './div/div[3]/ul/li')
+                    productPriceStr = ''
+
+                    # Check Mall
+                    isMall = False
+                    if 'prod_top5' in product.find_element(By.XPATH, './div/div[3]').get_attribute('class').split(' '):
+                        isMall = True
+                    
+                    if isMall:
+                        for productPrice in productPrices:
+                            if 'top5_button' in productPrice.get_attribute('class').split(' '):
+                                continue
+                            
+                            if productPriceStr:
+                                productPriceStr += DATA_PRODUCT_DIVIDER
+                            
+                            mallName = productPrice.find_element_by(By.XPATH, './a/div[1]').text.strip()
+                            if not mallName:
+                                mallName = productPrice.find_element(By.XPATH, './a/div[1]/span[1]').text.strip()
+                            
+                            price = productPrice.find_element(By.XPATH, './a/div[2]/em').text.strip()
+
+                            productPriceStr += f'{mallName}{DATA_ROW_DIVIDER}{price}'
+                    else:
+                        for productPrice in productPrices:
+                            if productPriceStr:
+                                productPriceStr += DATA_PRODUCT_DIVIDER
+                            
+                            # Default
+                            productType = productPrice.find_element(By.XPATH, './div/p').text.strip()
+
+                            # like Ram/HDD/SSD
+                            # HDD : 'WD60EZAZ, 6TB\n25원/1GB_149,000'
+                            productType = productType.replace('\n', DATA_ROW_DIVIDER)
+
+                            # Remove rank text
+                            # 1위, 2위 ...
+                            productType = self.RemoveRankText(productType)
+                            
+                            price = productPrice.find_element(By.XPATH, './p[2]/a/strong').text.strip()
+
+                            if productType:
+                                productPriceStr += f'{productType}{DATA_ROW_DIVIDER}{price}'
+                            else:
+                                productPriceStr += f'{price}'
                     
                     crawlingData_csvWriter.writerow([productId, productName, productPriceStr])
 
@@ -151,89 +192,6 @@ class DanawaCrawler:
         crawlingFile.close()
 
         print('Crawling Finish : ' + crawlingName)
-
-    def CloseOverlayElements(self, browser):
-        try:
-            browser.execute_script("""
-                var selectors = [
-                    'button[class*="close"]',
-                    'button.close',
-                    '.button__close',
-                    '.btn_close',
-                    '.btn_service_close',
-                    '.layer__user-recent button',
-                    '.layer-prod-pdb1 button',
-                    '[role="dialog"] button'
-                ];
-                selectors.forEach(function(sel){
-                    var elems = document.querySelectorAll(sel);
-                    for (var i = 0; i < elems.length; i++) {
-                        try { elems[i].click(); } catch (e) {}
-                    }
-                });
-            """)
-        except Exception:
-            pass
-
-    def ClickElementSafely(self, browser, by, value):
-        try:
-            element = WebDriverWait(browser, 5).until(EC.element_to_be_clickable((by, value)))
-            browser.execute_script("arguments[0].scrollIntoView({block:'center'});", element)
-            element.click()
-        except Exception:
-            try:
-                browser.execute_script("arguments[0].click();", element)
-            except Exception:
-                pass
-
-    def ExtractProductName(self, product):
-        selectors = [
-            (By.CSS_SELECTOR, 'a.prod_name'),
-            (By.CSS_SELECTOR, 'p.prod_name'),
-            (By.CSS_SELECTOR, 'a[href*="info"]'),
-            (By.XPATH, './/a[contains(@class, "prod_name")]'),
-            (By.XPATH, './/p[contains(@class, "prod_name")]'),
-            (By.XPATH, './/a[contains(@href, "info") and not(@class="") ]'),
-        ]
-
-        for by, value in selectors:
-            try:
-                element = product.find_element(by, value)
-                text = element.text.strip()
-                if text:
-                    return text
-            except (NoSuchElementException, StaleElementReferenceException):
-                continue
-
-        return ''
-
-    def ExtractProductPriceStr(self, product):
-        priceCandidates = [
-            (By.CSS_SELECTOR, 'div.price_sect a strong'),
-            (By.CSS_SELECTOR, 'div.price_sect strong'),
-            (By.CSS_SELECTOR, 'div.price_sect em'),
-            (By.XPATH, './/div[contains(@class, "price_sect")]//strong'),
-            (By.XPATH, './/div[contains(@class, "price_sect")]//em'),
-            (By.XPATH, './/div[contains(@class, "price_sect")]//span'),
-            (By.XPATH, './/p[contains(@class, "price")]//strong'),
-            (By.XPATH, './/a[contains(@class, "price")]//strong'),
-        ]
-
-        for by, value in priceCandidates:
-            try:
-                elements = product.find_elements(by, value)
-                if elements:
-                    priceTexts = []
-                    for element in elements:
-                        text = element.text.strip()
-                        if text:
-                            priceTexts.append(text)
-                    if priceTexts:
-                        return DATA_PRODUCT_DIVIDER.join(priceTexts)
-            except (NoSuchElementException, StaleElementReferenceException):
-                continue
-
-        return ''
 
     def RemoveRankText(self, productText):
         if len(productText) < 2:
